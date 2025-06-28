@@ -176,6 +176,12 @@
             
             const totalPercentage = useMemo(() => setupActivities.reduce((sum, act) => sum + Math.round(act.percentage), 0), [setupActivities]);
             
+            const predictedEndTime = useMemo(() => {
+                const now = new Date();
+                const endTime = new Date(now.getTime() + totalTimeInSeconds * 1000);
+                return endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }, [totalTimeInSeconds]);
+
             useEffect(() => {
                 let interval = null;
                 if (timerState.isActive && timerState.totalTimeRemaining > 0) {
@@ -339,7 +345,7 @@
             const handleSwitchActivity = (index) => { if (sessionActivities[index].remainingDuration > 0) setTimerState(prev => ({ ...prev, currentActivityIndex: index })); };
             
             const renderSetupScreen = () => (
-                <div className="p-4 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-auto my-8">
+                <div className="p-4 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl">
                     <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-2 text-center">TimeSlice</h1>
                     <p className="text-gray-600 dark:text-gray-300 mb-6 text-center">Drag the dividers or type percentages to set your time slices.</p>
                     
@@ -354,6 +360,9 @@
                             <span className="text-2xl font-bold text-gray-500 dark:text-gray-400 pt-5">:</span>
                             <div className="flex-1"><label htmlFor="minutes" className="block text-sm font-medium text-gray-500 dark:text-gray-400">Minutes</label><input type="number" name="minutes" id="minutes" value={Math.floor((totalTimeInSeconds % 3600) / 60)} onChange={handleTimeChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
                         </div>
+                        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            Session will end at: <span className="font-semibold">{predictedEndTime}</span>
+                        </p>
                     </div>
                     
                     <div className="mb-6">
@@ -415,7 +424,7 @@
             };
 
             return (
-                <div className="min-h-screen">
+                <div className="min-h-screen p-4">
                     {screen === 'setup' && renderSetupScreen()}
                     {screen === 'timer' && renderTimerScreen()}
                     {screen === 'completed' && renderCompletedScreen()}
