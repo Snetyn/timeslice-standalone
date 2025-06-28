@@ -29,7 +29,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
@@ -59,13 +59,19 @@
             const startX = useRef(0);
             const initialPercentages = useRef([]);
 
-            const handleMouseDown = (e, index) => {
+            const getClientX = (e) => {
+                return e.touches ? e.touches[0].clientX : e.clientX;
+            };
+
+            const startDrag = (e, index) => {
                 e.preventDefault();
                 draggingIndex.current = index;
-                startX.current = e.clientX;
+                startX.current = getClientX(e);
                 initialPercentages.current = activities.map(a => a.percentage);
                 window.addEventListener('mousemove', handleMouseMove);
-                window.addEventListener('mouseup', handleMouseUp);
+                window.addEventListener('mouseup', stopDrag);
+                window.addEventListener('touchmove', handleMouseMove);
+                window.addEventListener('touchend', stopDrag);
             };
 
             const handleMouseMove = (e) => {
@@ -73,7 +79,7 @@
                 
                 const barWidth = barRef.current.offsetWidth;
                 if (barWidth === 0) return;
-                const dx = e.clientX - startX.current;
+                const dx = getClientX(e) - startX.current;
                 const percentageDelta = (dx / barWidth) * 100;
                 
                 const leftActivityIndex = draggingIndex.current;
@@ -97,11 +103,13 @@
                 setActivities(current => current.map((act, i) => ({...act, percentage: newPercentages[i] })));
             };
 
-            const handleMouseUp = () => {
+            const stopDrag = () => {
                 if (draggingIndex.current === null) return;
                 draggingIndex.current = null;
                 window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
+                window.removeEventListener('mouseup', stopDrag);
+                window.removeEventListener('touchmove', handleMouseMove);
+                window.removeEventListener('touchend', stopDrag);
                 
                 setActivities(current => {
                     const rounded = current.map(a => ({ ...a, percentage: Math.round(a.percentage) }));
@@ -120,7 +128,9 @@
             useEffect(() => {
                 return () => {
                     window.removeEventListener('mousemove', handleMouseMove);
-                    window.removeEventListener('mouseup', handleMouseUp);
+                    window.removeEventListener('mouseup', stopDrag);
+                    window.removeEventListener('touchmove', handleMouseMove);
+                    window.removeEventListener('touchend', stopDrag);
                 };
             }, []);
 
@@ -140,8 +150,9 @@
                             </div>
                             {index < activities.length - 1 && (
                                 <div 
-                                    className="h-full w-2 bg-white dark:bg-gray-500 hover:bg-indigo-300 dark:hover:bg-indigo-600 cursor-ew-resize transition-colors"
-                                    onMouseDown={(e) => handleMouseDown(e, index)}
+                                    className="h-full w-4 bg-white dark:bg-gray-500 hover:bg-indigo-300 dark:hover:bg-indigo-600 cursor-ew-resize transition-colors"
+                                    onMouseDown={(e) => startDrag(e, index)}
+                                    onTouchStart={(e) => startDrag(e, index)}
                                 />
                             )}
                         </React.Fragment>
@@ -418,4 +429,3 @@
     </script>
 </body>
 </html>
-```</immersive>
