@@ -22,10 +22,14 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .dark body {
+            background-color: #111827;
         }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
@@ -65,7 +69,7 @@
             };
 
             const handleMouseMove = (e) => {
-                if (draggingIndex.current === null) return;
+                if (draggingIndex.current === null || !barRef.current) return;
                 
                 const barWidth = barRef.current.offsetWidth;
                 if (barWidth === 0) return;
@@ -76,7 +80,6 @@
                 const rightActivityIndex = draggingIndex.current + 1;
                 
                 const newPercentages = [...initialPercentages.current];
-
                 const leftPct = newPercentages[leftActivityIndex];
                 const rightPct = newPercentages[rightActivityIndex];
                 
@@ -106,7 +109,9 @@
                     const error = 100 - total;
                     if (error !== 0 && rounded.length > 0) {
                         const activityToFix = rounded.find(a => a.percentage + error >= 0) || rounded[0];
-                        activityToFix.percentage += error;
+                        if (activityToFix) {
+                            activityToFix.percentage += error;
+                        }
                     }
                     return rounded;
                 });
@@ -128,7 +133,7 @@
                                 style={{
                                     width: `${activity.percentage}%`,
                                     backgroundColor: activityColors[index % activityColors.length],
-                                    transition: 'width 150ms ease-out'
+                                    transition: 'width 50ms ease-out'
                                 }}
                             >
                                {Math.round(activity.percentage) > 5 ? `${Math.round(activity.percentage)}%` : ''}
@@ -147,7 +152,6 @@
 
         // --- Main App Component ---
         function App() {
-            // --- STATE MANAGEMENT ---
             const [screen, setScreen] = useState('setup'); 
             const [totalTimeInSeconds, setTotalTimeInSeconds] = useState(3 * 3600); 
 
@@ -159,10 +163,8 @@
             const [sessionActivities, setSessionActivities] = useState([]);
             const [timerState, setTimerState] = useState({isActive: false, currentActivityIndex: 0, totalTimeRemaining: 0});
             
-            // --- DERIVED STATE & MEMOS ---
             const totalPercentage = useMemo(() => setupActivities.reduce((sum, act) => sum + Math.round(act.percentage), 0), [setupActivities]);
             
-            // --- TIMER LOGIC ---
             useEffect(() => {
                 let interval = null;
                 if (timerState.isActive && timerState.totalTimeRemaining > 0) {
@@ -177,6 +179,7 @@
                             return newActivities;
                         });
                         setTimerState(prev => ({ ...prev, totalTimeRemaining: prev.totalTimeRemaining - 1 }));
+                        
                         const currentActivity = sessionActivities[timerState.currentActivityIndex];
                         if (currentActivity && currentActivity.remainingDuration <= 0) {
                            const nextIndex = sessionActivities.findIndex((act, index) => index > timerState.currentActivityIndex && act.remainingDuration > 0);
@@ -184,7 +187,9 @@
                                setTimerState(prev => ({...prev, currentActivityIndex: nextIndex}));
                            } else {
                                const firstIndex = sessionActivities.findIndex(act => act.remainingDuration > 0);
-                                if (firstIndex !== -1) setTimerState(prev => ({...prev, currentActivityIndex: firstIndex}));
+                                if (firstIndex !== -1) {
+                                    setTimerState(prev => ({...prev, currentActivityIndex: firstIndex}));
+                                }
                            }
                         }
                     }, 1000);
@@ -196,7 +201,6 @@
             }, [timerState.isActive, timerState.totalTimeRemaining, timerState.currentActivityIndex, sessionActivities]);
 
 
-            // --- HANDLER FUNCTIONS ---
             const handleAddActivity = () => {
                 setSetupActivities(prev => {
                     if (prev.length === 0) return [{ id: Date.now(), name: `New Activity`, percentage: 100 }];
@@ -321,64 +325,4 @@
             };
             
             const handlePauseToggle = () => setTimerState(prev => ({ ...prev, isActive: !prev.isActive }));
-            const handleSwitchActivity = (index) => { if (sessionActivities[index].remainingDuration > 0) setTimerState(prev => ({ ...prev, currentActivityIndex: index })); };
-
-            // --- RENDER FUNCTIONS ---
-            
-            const renderSetupScreen = () => (
-                <div className="p-6 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl">
-                    <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-2 text-center">TimeSlice</h1>
-                    <p className="text-gray-600 dark:text-gray-300 mb-6 text-center">Drag the dividers or type percentages to set your time slices.</p>
-                    
-                    <div className="mb-6">
-                        <StackedBar activities={setupActivities} setActivities={setSetupActivities} />
-                    </div>
-
-                    <div className="mb-6 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">1. Set Total Duration</h2>
-                        <div className="flex items-center space-x-4">
-                            <div className="flex-1"><label htmlFor="hours" className="block text-sm font-medium text-gray-500 dark:text-gray-400">Hours</label><input type="number" name="hours" id="hours" value={Math.floor(totalTimeInSeconds / 3600)} onChange={handleTimeChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
-                            <span className="text-2xl font-bold text-gray-500 dark:text-gray-400 pt-5">:</span>
-                            <div className="flex-1"><label htmlFor="minutes" className="block text-sm font-medium text-gray-500 dark:text-gray-400">Minutes</label><input type="number" name="minutes" id="minutes" value={Math.floor((totalTimeInSeconds % 3600) / 60)} onChange={handleTimeChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
-                        </div>
-                    </div>
-                    
-                    <div className="mb-6">
-                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">2. Activities</h2>
-                         <div className="space-y-3">{setupActivities.map((activity, index) => (<div key={activity.id} className="flex items-center space-x-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <div className="w-5 h-5 rounded-full" style={{backgroundColor: activityColors[index % activityColors.length]}}></div>
-                            <input type="text" value={activity.name} onChange={(e) => handleUpdateName(activity.id, e.target.value)} className="flex-grow p-2 bg-transparent dark:text-white font-semibold" />
-                            <input type="number" value={Math.round(activity.percentage)} onChange={(e) => handleUpdatePercentage(activity.id, e.target.value)} className="w-20 p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md" />
-                            <span className="font-semibold text-gray-500 dark:text-gray-400">%</span>
-                            <button onClick={() => handleRemoveActivity(activity.id)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg></button>
-                         </div>))}</div>
-                         <button onClick={handleAddActivity} className="mt-4 w-full text-sm font-semibold py-2 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">+ Add Activity</button>
-                    </div>
-
-                    <div className="flex items-center justify-center mt-6">
-                        <button onClick={handleStartTimer} disabled={totalPercentage !== 100} className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Start Session</button>
-                    </div>
-                    {totalPercentage !== 100 && (<p className="text-red-500 text-sm mt-2 font-medium text-center">Total must be {100}%. It is {totalPercentage}%</p>)}
-                </div>
-            );
-            
-            const renderTimerScreen = () => {
-                if (!sessionActivities.length) return null;
-                const currentActivity = sessionActivities[timerState.currentActivityIndex];
-                const overallProgress = ((totalTimeInSeconds - timerState.totalTimeRemaining) / totalTimeInSeconds) * 100;
-                const predictedEndTime = new Date(Date.now() + timerState.totalTimeRemaining * 1000);
-
-                return (
-                    <div className="p-6 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl text-center">
-                        <p className="text-indigo-500 dark:text-indigo-400 font-semibold">Current Activity</p>
-                        <h1 className="text-3xl md:text-5xl font-bold text-gray-800 dark:text-white my-2 break-words">{currentActivity.name}</h1>
-                        <p className="text-7xl md:text-8xl font-mono font-bold text-gray-900 dark:text-white my-6">{formatTime(currentActivity.remainingDuration)}</p>
-                        <div className="my-8">
-                            <div className="flex justify-between items-baseline text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                <span>Overall Progress</span><span>Ends at {predictedEndTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4"><div className="bg-green-500 h-4 rounded-full" style={{ width: `${overallProgress}%` }}></div></div>
-                        </div>
-                        <div className="my-8 space-y-2">
-                            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">Switch Activity</h2>
-                            {sess
+            const handleSwitchActivit
