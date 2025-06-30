@@ -1,568 +1,795 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>TimeSlice App - vB.6</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-        .dark body { background-color: #111827; }
-        .hue-slider {
-            -webkit-appearance: none; width: 100%; height: 12px; border-radius: 6px;
-            background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
-            outline: none; opacity: 0.9; transition: opacity .2s;
-        }
-        .hue-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
-            border-radius: 50%; background: white; cursor: pointer; border: 2px solid #9ca3af;
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+// --- Self-Contained UI Components (replacing shadcn/ui and lucide-react) ---
 
-        const formatTime = (totalSeconds) => {
-            if (isNaN(totalSeconds) || totalSeconds < 0) return "00:00:00";
-            const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-            const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-            const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
-            return `${h}:${m}:${s}`;
+// Icon component to render SVGs
+const Icon = ({ name, className }) => {
+  const icons = {
+    plus: <path d="M5 12h14m-7-7v14" />,
+    trash2: <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 8v-4m4 4v-4" />,
+    play: <path d="m5 3 14 9-14 9V3z" />,
+    pause: <path d="M6 4h4v16H6zM14 4h4v16h-4z" />,
+    rotateCcw: (
+        <>
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+        </>
+    ),
+    settings: (
+        <>
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+        </>
+    ),
+    x: <path d="M18 6 6 18M6 6l12 12" />,
+    heart: <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />,
+  };
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {icons[name]}
+    </svg>
+  );
+};
+
+const Button = ({ variant = 'default', size = 'default', className = '', children, ...props }) => {
+  const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+  const sizeClasses = {
+    default: "h-10 px-4 py-2",
+    sm: "h-9 rounded-md px-3",
+    lg: "h-11 rounded-md px-8",
+  };
+  const variantClasses = {
+    default: "bg-slate-900 text-slate-50 hover:bg-slate-900/90",
+    destructive: "bg-red-500 text-slate-50 hover:bg-red-500/90",
+    outline: "border border-slate-200 bg-transparent hover:bg-slate-100 hover:text-slate-900",
+    ghost: "hover:bg-slate-100 hover:text-slate-900",
+  };
+  return (
+    <button className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className}`} {...props}>
+      {children}
+    </button>
+  );
+};
+
+const Input = ({ className = '', ...props }) => (
+  <input className={`flex h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`} {...props} />
+);
+
+const Card = ({ className = '', children }) => <div className={`rounded-lg border bg-white text-slate-950 shadow-sm ${className}`}>{children}</div>;
+const CardHeader = ({ className = '', children }) => <div className={`flex flex-col space-y-1.5 p-6 ${className}`}>{children}</div>;
+const CardTitle = ({ className = '', children }) => <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`}>{children}</h3>;
+const CardContent = ({ className = '', children }) => <div className={`p-6 pt-0 ${className}`}>{children}</div>;
+
+const Separator = ({ className = '' }) => <hr className={`-mx-6 border-slate-200 ${className}`} />;
+
+const Badge = ({ variant = 'default', className = '', children }) => {
+    const variantClasses = {
+        default: "border-transparent bg-slate-900 text-slate-50",
+        secondary: "border-transparent bg-slate-100 text-slate-900",
+        destructive: "border-transparent bg-red-500 text-slate-50",
+    };
+    return <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${variantClasses[variant]} ${className}`}>{children}</div>;
+};
+
+const Progress = ({ value, className = '' }) => (
+  <div className={`relative h-4 w-full overflow-hidden rounded-full bg-slate-100 ${className}`}>
+    <div className="h-full w-full flex-1 bg-slate-900 transition-all" style={{ transform: `translateX(-${100 - (value || 0)}%)` }} />
+  </div>
+);
+
+const Switch = ({ checked, onCheckedChange, id }) => (
+    <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onCheckedChange(!checked)}
+        id={id}
+        className={`${checked ? 'bg-slate-900' : 'bg-slate-200'} relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2`}
+    >
+        <span
+            aria-hidden="true"
+            className={`${checked ? 'translate-x-5' : 'translate-x-0'} pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+        />
+    </button>
+);
+
+const Label = ({ className = '', children, ...props }) => <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props}>{children}</label>;
+
+// --- Interfaces ---
+interface Activity {
+  id: string;
+  name: string;
+  percentage: number;
+  color: string;
+  duration: number; // in minutes
+  timeRemaining: number; // in seconds
+}
+
+interface TimerSettings {
+  showMainProgress: boolean;
+  showOverallTime: boolean;
+  showEndTime: boolean;
+  showActivityTimer: boolean;
+  showActivityProgress: boolean;
+  activityProgressType: 'fill' | 'drain';
+}
+
+interface ColorPickerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentColor: string;
+  onColorChange: (color: string) => void;
+  favorites: string[];
+  onAddFavorite: (color: string) => void;
+}
+
+// --- Color Picker Component ---
+const ColorPicker = ({ isOpen, onClose, currentColor, onColorChange, favorites, onAddFavorite }: ColorPickerProps) => {
+  const [hue, setHue] = useState(0);
+  const [saturation, setSaturation] = useState(100);
+  const [lightness, setLightness] = useState(50);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (currentColor) {
+      const hslMatch = currentColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+      if (hslMatch) {
+        setHue(Number.parseInt(hslMatch[1]));
+        setSaturation(Number.parseInt(hslMatch[2]));
+        setLightness(Number.parseInt(hslMatch[3]));
+      }
+    }
+  }, [currentColor]);
+
+  const currentHSL = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+  useEffect(() => {
+    onColorChange(currentHSL);
+  }, [hue, saturation, lightness, onColorChange]);
+
+  const handleCanvasInteraction = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+
+      setSaturation(Math.max(0, Math.min(100, x)));
+      setLightness(Math.max(0, Math.min(100, 100 - y)));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        const s = (x / width) * 100;
+        const l = ((height - y) / height) * 100;
+        ctx.fillStyle = `hsl(${hue}, ${s}%, ${l}%)`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }, [hue]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-lg">Color Picker</CardTitle>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <Icon name="x" className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-full border-2 border-gray-300" style={{ backgroundColor: currentHSL }} />
+            <span className="text-sm font-mono">{currentHSL}</span>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Hue</Label>
+            <div className="relative">
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={hue}
+                onChange={(e) => setHue(Number.parseInt(e.target.value))}
+                className="w-full h-6 rounded-lg appearance-none cursor-pointer"
+                style={{
+                  background: "linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))",
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Saturation & Lightness</Label>
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                width={256}
+                height={256}
+                className="w-full h-48 border rounded cursor-crosshair"
+                onMouseDown={(e) => { setIsDragging(true); handleCanvasInteraction(e); }}
+                onMouseMove={(e) => { if (isDragging) handleCanvasInteraction(e); }}
+                onMouseUp={() => setIsDragging(false)}
+                onTouchStart={(e) => { setIsDragging(true); handleCanvasInteraction(e); }}
+                onTouchMove={(e) => { if (isDragging) handleCanvasInteraction(e); }}
+                onTouchEnd={() => setIsDragging(false)}
+              />
+              <div
+                className="absolute w-3 h-3 border-2 border-white rounded-full pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+                style={{
+                  left: `${saturation}%`,
+                  top: `${100 - lightness}%`,
+                  boxShadow: "0 0 0 1px rgba(0,0,0,0.3)",
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Favorites</Label>
+              <Button variant="outline" size="sm" onClick={() => onAddFavorite(currentHSL)} className="text-xs">
+                <Icon name="heart" className="h-3 w-3 mr-1" />
+                Add
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {favorites.map((color, index) => (
+                <button
+                  key={index}
+                  className="w-8 h-8 rounded-full border-2 border-gray-300 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color }}
+                  onClick={() => onColorChange(color)}
+                />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// --- Main Application Component ---
+export default function App() {
+  const [activities, setActivities] = useState<Activity[]>([
+    { id: "1", name: "Focus Work", percentage: 60, color: "hsl(220, 70%, 50%)", duration: 0, timeRemaining: 0 },
+    { id: "2", name: "Break", percentage: 40, color: "hsl(120, 60%, 50%)", duration: 0, timeRemaining: 0 },
+  ]);
+
+  const [totalHours, setTotalHours] = useState(2);
+  const [totalMinutes, setTotalMinutes] = useState(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [colorPickerState, setColorPickerState] = useState({ isOpen: false, activityId: "", currentColor: "" });
+  const [favoriteColors, setFavoriteColors] = useState<string[]>([
+    "hsl(220, 70%, 50%)", "hsl(120, 60%, 50%)", "hsl(0, 70%, 50%)", "hsl(280, 60%, 50%)", "hsl(40, 80%, 50%)",
+  ]);
+  const [settings, setSettings] = useState<TimerSettings>({
+    showMainProgress: true, 
+    showOverallTime: true, 
+    showEndTime: true, 
+    showActivityTimer: true,
+    showActivityProgress: false, 
+    activityProgressType: 'drain'
+  });
+  const [durationType, setDurationType] = useState<'duration' | 'endTime'>('duration');
+  const [endTime, setEndTime] = useState('23:30');
+
+  const calculateTotalSessionMinutes = () => {
+    if (durationType === 'endTime') {
+        const now = new Date();
+        const [endHour, endMinute] = endTime.split(':').map(Number);
+        const endDate = new Date();
+        endDate.setHours(endHour, endMinute, 0, 0);
+        if (endDate < now) {
+            endDate.setDate(endDate.getDate() + 1); // If end time is in the past, assume it's for the next day
+        }
+        return Math.round((endDate.getTime() - now.getTime()) / 60000);
+    }
+    return totalHours * 60 + totalMinutes;
+  };
+
+  const totalSessionMinutes = calculateTotalSessionMinutes();
+  const totalPercentage = activities.reduce((sum, activity) => sum + activity.percentage, 0);
+
+  useEffect(() => {
+    setActivities((prev) =>
+      prev.map((activity) => {
+        const newDuration = Math.round((activity.percentage / 100) * totalSessionMinutes);
+        return {
+          ...activity,
+          duration: newDuration,
+          timeRemaining: newDuration * 60,
         };
+      }),
+    );
+  }, [activities.map((a) => a.percentage).join(","), totalSessionMinutes]);
 
-        const defaultColors = ['#4f46e5', '#7c3aed', '#db2777', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#0ea5e9'];
-        
-        const Icon = ({ path, className = "w-6 h-6" }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-            </svg>
+  useEffect(() => {
+    let interval: number;
+
+    if (isTimerActive && !isPaused) {
+      interval = window.setInterval(() => {
+        setActivities(prevActivities => {
+          const newActivities = [...prevActivities];
+          const currentActivity = newActivities[currentActivityIndex];
+
+          if (currentActivity.timeRemaining > 0) {
+            currentActivity.timeRemaining -= 1;
+          } else {
+            const nextIndex = currentActivityIndex + 1;
+            if (nextIndex < newActivities.length) {
+              setCurrentActivityIndex(nextIndex);
+            } else {
+              setIsTimerActive(false); // End of session
+            }
+          }
+          return newActivities;
+        });
+      }, 1000);
+    }
+
+    return () => clearInterval(interval);
+  }, [isTimerActive, isPaused, currentActivityIndex]);
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const getPredictedEndTime = () => {
+    if (!isTimerActive) return "";
+    const totalRemainingSeconds = activities.reduce((sum, act) => sum + act.timeRemaining, 0);
+    const endTime = new Date(Date.now() + totalRemainingSeconds * 1000);
+    return endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const addActivity = () => {
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      name: "New Activity",
+      percentage: 0,
+      color: `hsl(${Math.floor(Math.random() * 360)}, 60%, 50%)`,
+      duration: 0,
+      timeRemaining: 0,
+    };
+    setActivities([...activities, newActivity]);
+  };
+
+  const removeActivity = (id: string) => {
+    if (activities.length > 1) {
+      setActivities(activities.filter((activity) => activity.id !== id));
+    }
+  };
+
+  const updateActivityPercentage = (id: string, newPercentage: number) => {
+    const activityToUpdate = activities.find((a) => a.id === id);
+    if (!activityToUpdate) return;
+
+    const otherActivities = activities.filter((a) => a.id !== id);
+    const otherTotal = otherActivities.reduce((sum, a) => sum + a.percentage, 0);
+
+    if (otherTotal === 0) {
+        setActivities((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, percentage: Math.min(100, Math.max(0, newPercentage)) } : a)),
         );
+        return;
+    }
+    
+    const safeNewPercentage = Math.min(100, Math.max(0, newPercentage));
+    const remainingPercentage = 100 - safeNewPercentage;
+    const scaleFactor = otherTotal > 0 ? remainingPercentage / otherTotal : 0;
 
-        const HSLToHex = (h, s, l) => {
-            l /= 100;
-            const a = s * Math.min(l, 1 - l) / 100;
-            const f = n => {
-                const k = (n + h / 30) % 12;
-                const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-                return Math.round(255 * color).toString(16).padStart(2, '0');
-            };
-            return `#${f(0)}${f(8)}${f(4)}`;
-        };
+    setActivities((prev) =>
+      prev.map((act) => {
+        if (act.id === id) {
+          return { ...act, percentage: safeNewPercentage };
+        } else {
+          return { ...act, percentage: Math.max(0, act.percentage * scaleFactor) };
+        }
+      }),
+    );
+  };
 
-        const ColorPicker = ({ onSelectColor, onClose, favoriteColors, setFavoriteColors }) => {
-            const [hue, setHue] = useState(0);
-            const [saturation, setSaturation] = useState(100);
-            const [lightness, setLightness] = useState(50);
-            const pickerRef = useRef(null);
-            const satLightBoxRef = useRef(null);
-            
-            const currentColorHex = useMemo(() => HSLToHex(hue, saturation, lightness), [hue, saturation, lightness]);
-            
-            useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (pickerRef.current && !pickerRef.current.contains(event.target)) onClose();
-                }
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, [onClose]);
+  const updateActivityName = (id: string, name: string) => {
+    setActivities((prev) => prev.map((activity) => (activity.id === id ? { ...activity, name } : activity)));
+  };
 
-            const handleSatLightDrag = (e) => {
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                const box = satLightBoxRef.current;
-                if (!box) return;
-                const rect = box.getBoundingClientRect();
-                const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-                const y = Math.max(0, Math.min(clientY - rect.top, rect.height));
-                setSaturation((x / rect.width) * 100);
-                setLightness(100 - (y / rect.height) * 100);
-            };
+  const updateActivityColor = (id: string, color: string) => {
+    setActivities((prev) => prev.map((activity) => (activity.id === id ? { ...activity, color } : activity)));
+  };
 
-            const handleMouseDown = (e) => {
-                e.preventDefault();
-                handleSatLightDrag(e);
-                window.addEventListener('mousemove', handleMouseMove);
-                window.addEventListener('mouseup', handleMouseUp);
-                window.addEventListener('touchmove', handleTouchMove, { passive: false });
-                window.addEventListener('touchend', handleMouseUp);
-            };
-            
-            const handleMouseMove = (e) => handleSatLightDrag(e);
-            const handleTouchMove = (e) => { e.preventDefault(); handleSatLightDrag(e); };
-            
-            const handleMouseUp = () => {
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-                window.removeEventListener('touchmove', handleTouchMove);
-                window.removeEventListener('touchend', handleMouseUp);
-            };
+  const startSession = () => {
+    if (Math.abs(totalPercentage - 100) < 0.1) {
+      setIsTimerActive(true);
+      setIsPaused(false);
+      setCurrentActivityIndex(0);
+      setSessionStartTime(new Date());
+    }
+  };
 
-            const handleAddFavorite = () => {
-                if (!favoriteColors.includes(currentColorHex)) {
-                    setFavoriteColors(prev => [...prev, currentColorHex].slice(-18));
-                }
-            };
-            
-            return (
-                <div ref={pickerRef} className="absolute z-20 left-8 top-0 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-64 space-y-3">
-                    <div ref={satLightBoxRef} className="w-full h-32 rounded-md cursor-crosshair relative" style={{backgroundColor: `hsl(${hue}, 100%, 50%)`}} onMouseDown={handleMouseDown} onTouchStart={handleMouseDown}>
-                        <div className="absolute inset-0" style={{background: 'linear-gradient(to right, white, transparent)'}}></div>
-                        <div className="absolute inset-0" style={{background: 'linear-gradient(to top, black, transparent)'}}></div>
-                        <div className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white shadow-md pointer-events-none" style={{ left: `${saturation}%`, top: `${100-lightness}%` }}></div>
-                    </div>
-                    <input type="range" min="0" max="360" value={hue} onChange={e => setHue(e.target.value)} className="hue-slider" />
-                    <div className="flex justify-between items-center">
-                         <div className="flex items-center gap-2">
-                             <div className="w-8 h-8 rounded-md border border-gray-200 dark:border-gray-700" style={{backgroundColor: currentColorHex}}></div>
-                             <span className="text-sm font-mono text-gray-500">{currentColorHex}</span>
-                         </div>
-                         <button onClick={handleAddFavorite} className="p-2 text-gray-500 hover:text-yellow-500"><Icon path="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" className="w-5 h-5"/></button>
-                    </div>
-                    <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
-                        <div className="grid grid-cols-6 gap-2">
-                            {favoriteColors.map(color => (
-                                <button key={color} onClick={() => onSelectColor(color)} className="w-8 h-8 rounded-full" style={{backgroundColor: color}}></button>
-                            ))}
-                        </div>
-                    </div>
-                    <button onClick={() => onSelectColor(currentColorHex)} className="w-full mt-2 px-3 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-md hover:bg-indigo-700">Select & Close</button>
-                </div>
-            )
-        };
+  const pauseResumeTimer = () => {
+      setIsPaused(prev => !prev);
+  };
 
-        const StackedBar = ({ activities, setActivities }) => {
-            const barRef = useRef(null);
-            const [isDragging, setIsDragging] = useState(false);
-            
-            const handleStartDrag = (e, index) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDragging(true);
-                const startX = e.touches ? e.touches[0].clientX : e.clientX;
-                const initialPercentages = activities.map(a => a.percentage);
-                const leftInitial = initialPercentages[index];
-                const rightInitial = initialPercentages[index + 1];
+  const resetSession = () => {
+    setIsTimerActive(false);
+    setIsPaused(false);
+    setCurrentActivityIndex(0);
+    setSessionStartTime(null);
+     setActivities((prev) =>
+      prev.map((activity) => ({
+        ...activity,
+        timeRemaining: activity.duration * 60,
+      })),
+    );
+  };
 
-                const handleMove = (moveEvent) => {
-                    const currentX = moveEvent.touches ? moveEvent.touches[0].clientX : moveEvent.clientX;
-                    const dx = currentX - startX;
-                    const barWidth = barRef.current.offsetWidth;
-                    if (barWidth === 0) return;
-                    
-                    const percentageDelta = (dx / barWidth) * 100;
-                    let actualDelta = Math.max(-leftInitial, Math.min(percentageDelta, rightInitial));
+  const switchToActivity = (index: number) => {
+    setCurrentActivityIndex(index);
+  };
 
-                    const newPercentages = [...initialPercentages];
-                    newPercentages[index] += actualDelta;
-                    newPercentages[index + 1] -= actualDelta;
+  const openColorPicker = (activityId: string, currentColor: string) => {
+    setColorPickerState({ isOpen: true, activityId, currentColor });
+  };
 
-                    setActivities(current => current.map((act, i) => ({...act, percentage: newPercentages[i] })));
-                };
+  const closeColorPicker = () => {
+    setColorPickerState({ isOpen: false, activityId: "", currentColor: "" });
+  };
 
-                const handleEndDrag = () => {
-                    window.removeEventListener('mousemove', handleMove);
-                    window.removeEventListener('mouseup', handleEndDrag);
-                    window.removeEventListener('touchmove', handleMove);
-                    window.removeEventListener('touchend', handleEndDrag);
-                    setIsDragging(false);
-                     setActivities(current => {
-                        const rounded = current.map(a => ({ ...a, percentage: Math.round(a.percentage) }));
-                        const total = rounded.reduce((s, a) => s + a.percentage, 0);
-                        const error = 100 - total;
-                        if (error !== 0 && rounded.length > 0) {
-                            const activityToFix = rounded.find(a => a.percentage + error >= 0 && a.percentage > 0) || rounded[0];
-                            if (activityToFix) activityToFix.percentage += error;
-                        }
-                        return rounded;
-                    });
-                };
+  const handleColorChange = React.useCallback((color: string) => {
+    if (colorPickerState.activityId) {
+      updateActivityColor(colorPickerState.activityId, color);
+    }
+  }, [colorPickerState.activityId]);
 
-                window.addEventListener('mousemove', handleMove);
-                window.addEventListener('mouseup', handleEndDrag);
-                window.addEventListener('touchmove', handleMove, { passive: false });
-                window.addEventListener('touchend', handleEndDrag);
-            };
+  const addFavoriteColor = (color: string) => {
+    if (!favoriteColors.includes(color)) {
+      setFavoriteColors([...favoriteColors, color]);
+    }
+  };
 
-            return (
-                <div ref={barRef} className="w-full h-12 flex rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700 select-none">
-                    {activities.map((activity, index) => (
-                        <React.Fragment key={activity.id}>
-                            <div className="h-full flex items-center justify-center text-white font-bold text-sm"
-                                style={{
-                                    width: `${activity.percentage}%`,
-                                    backgroundColor: activity.color || defaultColors[index % defaultColors.length],
-                                    transition: isDragging ? 'none' : 'width 150ms ease-out'
-                                }}>
-                               {Math.round(activity.percentage) > 5 ? `${Math.round(activity.percentage)}%` : ''}
-                            </div>
-                            {index < activities.length - 1 && (
-                                <div 
-                                    className="h-full w-4 flex-shrink-0 bg-white dark:bg-gray-500 hover:bg-indigo-300 dark:hover:bg-indigo-600 cursor-ew-resize transition-colors"
-                                    onMouseDown={(e) => handleStartDrag(e, index)}
-                                    onTouchStart={(e) => handleStartDrag(e, index)}
-                                />
-                            )}
-                        </React.Fragment>
-                    ))}
-                </div>
-            );
-        };
+  const handleBarDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = e.currentTarget;
+    const rect = bar.getBoundingClientRect();
+    const startX = e.clientX;
+    const startPercentages = activities.map((a) => a.percentage);
+
+    let segmentIndex = -1;
+    let cumulativePercentage = 0;
+    for (let i = 0; i < activities.length - 1; i++) {
+        cumulativePercentage += startPercentages[i];
+        const segmentPosition = (cumulativePercentage / 100) * rect.width;
+        if (Math.abs(startX - rect.left - segmentPosition) < 10) { // 10px tolerance
+            segmentIndex = i;
+            break;
+        }
+    }
+    
+    if (segmentIndex === -1) return;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaPercentage = (deltaX / rect.width) * 100;
+
+        const newPercentages = [...startPercentages];
         
-        function App() {
-            const [screen, setScreen] = useState('setup'); 
-            const [totalTimeInSeconds, setTotalTimeInSeconds] = useState(3600);
-            const [setupActivities, setSetupActivities] = useState(() => JSON.parse(localStorage.getItem('timeslice_B6_setup')) || [
-                { id: 1, name: 'Work', percentage: 70, color: '#4f46e5' },
-                { id: 2, name: 'Break', percentage: 30, color: '#db2777' },
-            ]);
-            const [sessionActivities, setSessionActivities] = useState([]);
-            const [timerState, setTimerState] = useState({isActive: false, currentActivityIndex: 0, totalTimeRemaining: 0, predictedEndTime: null});
-            const [openColorPickerId, setOpenColorPickerId] = useState(null);
-            const [favoriteColors, setFavoriteColors] = useState(() => JSON.parse(localStorage.getItem('timeslice_B6_fav_colors')) || [...defaultColors]);
-            const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('timeslice_B6_settings')) || { timeInputMode: 'duration', showMainProgressBar: true, showPredictedEndTime: true, showOverallTime: true });
+        const originalLeft = startPercentages[segmentIndex];
+        const originalRight = startPercentages[segmentIndex + 1];
 
-            useEffect(() => localStorage.setItem('timeslice_B6_setup', JSON.stringify(setupActivities)), [setupActivities]);
-            useEffect(() => localStorage.setItem('timeslice_B6_settings', JSON.stringify(settings)), [settings]);
-            useEffect(() => localStorage.setItem('timeslice_B6_fav_colors', JSON.stringify(favoriteColors)), [favoriteColors]);
-            
-            const totalPercentage = useMemo(() => setupActivities.reduce((sum, act) => sum + Math.round(act.percentage || 0), 0), [setupActivities]);
-            
-            useEffect(() => {
-                let interval = null;
-                if (timerState.isActive && timerState.totalTimeRemaining > 0) {
-                    interval = setInterval(() => {
-                        const newTotalTimeRemaining = timerState.totalTimeRemaining - 1;
-                        
-                        setSessionActivities(prevSess => {
-                            const newSess = [...prevSess];
-                            const current = newSess[timerState.currentActivityIndex];
-                            if(current && current.remainingDuration > 0) {
-                                current.remainingDuration -= 1;
-                            } else if (current && current.remainingDuration <= 0) {
-                                const nextIndex = newSess.findIndex((a, i) => i > timerState.currentActivityIndex && a.remainingDuration > 0);
-                                if(nextIndex !== -1) {
-                                    setTimerState(prev => ({...prev, currentActivityIndex: nextIndex}));
-                                }
-                            }
-                            return newSess;
-                        });
+        let newLeft = originalLeft + deltaPercentage;
+        let newRight = originalRight - deltaPercentage;
 
-                        setTimerState(prev => ({ ...prev, totalTimeRemaining: newTotalTimeRemaining }));
-
-                        if (newTotalTimeRemaining <= 0) {
-                             setScreen('completed');
-                        }
-                    }, 1000);
-                } else if (timerState.totalTimeRemaining <= 0 && timerState.isActive) {
-                    setScreen('completed');
-                }
-                return () => clearInterval(interval);
-            }, [timerState.isActive, timerState.totalTimeRemaining, timerState.currentActivityIndex]);
-
-            const handleUpdateActivity = (id, field, value) => {
-                setSetupActivities(prev => prev.map(a => a.id === id ? {...a, [field]: value} : a));
-            };
-            
-            const handleUpdatePercentage = (id, value) => {
-                let targetValue = parseInt(value, 10);
-                if (isNaN(targetValue)) return;
-                targetValue = Math.max(0, Math.min(100, targetValue));
-
-                setSetupActivities(currentActivities => {
-                    const sourceActivity = currentActivities.find(a => a.id === id);
-                    if (!sourceActivity || currentActivities.length <= 1) return currentActivities.map(a => ({...a, percentage: 100}));
-
-                    const diff = targetValue - sourceActivity.percentage;
-                    const otherActivities = currentActivities.filter(a => a.id !== id);
-                    const othersTotal = otherActivities.reduce((sum, act) => sum + act.percentage, 0);
-
-                    if (othersTotal < diff && diff > 0) return currentActivities; 
-                    if (sourceActivity.percentage + diff < 0) return currentActivities;
-
-                    let newActivities = [...currentActivities].map(a => a.id === id ? {...a, percentage: targetValue} : a);
-                    
-                    const activitiesToDistributeFrom = otherActivities.filter(a => a.percentage > 0);
-                    const totalToDistributeFrom = activitiesToDistributeFrom.reduce((s, a) => s + a.percentage, 0);
-
-                    if (totalToDistributeFrom > 0) {
-                        activitiesToDistributeFrom.forEach(act => {
-                            const share = act.percentage / totalToDistributeFrom;
-                            const change = diff * share;
-                            newActivities = newActivities.map(a => a.id === act.id ? {...a, percentage: a.percentage - change} : a);
-                        });
-                    }
-                    
-                    const newTotal = newActivities.reduce((s, a) => s + a.percentage, 0);
-                    const error = 100 - newTotal;
-                    if (Math.abs(error) > 0.001) {
-                        const activityToAdjust = newActivities.find(a => a.percentage + error >= 0 && a.id !== id) || newActivities.find(a => a.id === id);
-                        if (activityToAdjust) activityToAdjust.percentage += error;
-                    }
-
-                    return newActivities.map(a => ({...a, percentage: Math.round(a.percentage)}));
-                });
-            };
-
-            const handleAddActivity = () => {
-                const newActivity = {id: Date.now(), name: "New Activity", percentage: 0, color: defaultColors[setupActivities.length % defaultColors.length] };
-                let newActivities = [...setupActivities, newActivity];
-                const total = newActivities.reduce((s, a) => s + a.percentage, 0);
-                if(total > 0){
-                    const factor = 100 / total;
-                    newActivities = newActivities.map(a => ({...a, percentage: a.percentage * factor}));
-                } else if (newActivities.length === 1) {
-                    newActivities[0].percentage = 100;
-                }
-                const newTotal = newActivities.reduce((s, a) => s + a.percentage, 0);
-                const error = 100 - newTotal;
-                if (error !== 0 && newActivities.length > 0) newActivities[0].percentage += error;
-
-                setSetupActivities(newActivities.map(a => ({...a, percentage: Math.round(a.percentage)})));
-            };
-
-            const handleRemoveActivity = (id) => {
-                setSetupActivities(prev => {
-                    if (prev.length <= 1) return prev;
-                    let remaining = prev.filter(a => a.id !== id);
-                    const totalRemaining = remaining.reduce((s, a) => s + a.percentage, 0);
-                    if (totalRemaining > 0) {
-                        const factor = 100 / totalRemaining;
-                        remaining = remaining.map(a => ({...a, percentage: a.percentage * factor}));
-                    }
-                    const total = remaining.reduce((s, a) => s + Math.round(a.percentage), 0);
-                    const error = 100 - total;
-                    if (error !== 0 && remaining.length > 0) remaining[0].percentage += error;
-                    return remaining.map(a => ({...a, percentage: Math.round(a.percentage)}));
-                });
-            };
-
-            const handleTimeInputChange = (e) => {
-                if (settings.timeInputMode === 'duration') {
-                    const { name, value } = e.target;
-                    const currentHours = Math.floor(totalTimeInSeconds / 3600);
-                    const currentMinutes = Math.floor((totalTimeInSeconds % 3600) / 60);
-                    let newHours = currentHours;
-                    let newMinutes = currentMinutes;
-                    if (name === 'hours') newHours = parseInt(value, 10) || 0;
-                    if (name === 'minutes') newMinutes = parseInt(value, 10) || 0;
-                    setTotalTimeInSeconds(newHours * 3600 + newMinutes * 60);
-                } else {
-                    const endTimeParts = e.target.value.split(':');
-                    const endHours = parseInt(endTimeParts[0], 10);
-                    const endMinutes = parseInt(endTimeParts[1], 10);
-                    if (!isNaN(endHours) && !isNaN(endMinutes)) {
-                        const now = new Date();
-                        const endTime = new Date();
-                        endTime.setHours(endHours, endMinutes, 0, 0);
-                        if (endTime < now) endTime.setDate(endTime.getDate() + 1);
-                        const diff = endTime - now;
-                        setTotalTimeInSeconds(Math.round(diff / 1000));
-                    }
-                }
-            };
-            
-            const predictedEndTimeSetup = useMemo(() => {
-                const now = new Date();
-                const endTime = new Date(now.getTime() + totalTimeInSeconds * 1000);
-                return endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }, [totalTimeInSeconds]);
-            
-            const predictedEndTimeSession = useMemo(() => {
-                 if (!timerState.predictedEndTime) return '';
-                 return timerState.predictedEndTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }, [timerState.predictedEndTime]);
-
-            const handleStartTimer = () => {
-                if (totalPercentage !== 100) return;
-                let remaining = totalTimeInSeconds;
-                const sessionActs = setupActivities.filter(a => a.percentage > 0).map(act => {
-                    const duration = Math.floor(totalTimeInSeconds * (act.percentage / 100));
-                    remaining -= duration;
-                    return {...act, duration, remainingDuration: duration};
-                });
-                if (remaining > 0 && sessionActs.length > 0) {
-                    sessionActs[0].remainingDuration += remaining;
-                }
-                setSessionActivities(sessionActs);
-                const endTime = new Date(Date.now() + totalTimeInSeconds * 1000);
-                setTimerState({isActive: true, currentActivityIndex: 0, totalTimeRemaining: totalTimeInSeconds, predictedEndTime: endTime });
-                setScreen('timer');
-            };
-            
-            const handleReset = () => {
-                setScreen('setup');
-                setTimerState({isActive: false, currentActivityIndex: 0, totalTimeRemaining: 0, predictedEndTime: null});
-            };
-
-            const handleSwitchActivity = (index) => {
-                setTimerState(prev => ({...prev, currentActivityIndex: index}));
-            };
-
-            const handlePauseToggle = () => {
-                setTimerState(prev => {
-                    const newIsActive = !prev.isActive;
-                    let newPredictedEndTime = prev.predictedEndTime;
-                    if (newIsActive && prev.predictedEndTime) {
-                        newPredictedEndTime = new Date(Date.now() + prev.totalTimeRemaining * 1000);
-                    }
-                    return {...prev, isActive: newIsActive, predictedEndTime: newPredictedEndTime};
-                });
-            };
-
-            const renderSetupScreen = () => (
-                <div className="p-4 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full mx-auto my-4">
-                    <div className="flex justify-between items-center mb-6">
-                        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">TimeSlice</h1>
-                        <button onClick={() => setScreen('settings')} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-white">
-                            <Icon path="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        </button>
-                    </div>
-                     <div className="mb-6 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">Set Total Duration</h2>
-                        {settings.timeInputMode === 'duration' ? (
-                             <div className="flex items-center space-x-4">
-                                <div className="flex-1"><label htmlFor="hours" className="block text-sm font-medium text-gray-500 dark:text-gray-400">Hours</label><input type="number" min="0" name="hours" id="hours" value={Math.floor(totalTimeInSeconds / 3600)} onChange={handleTimeInputChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
-                                <span className="text-2xl font-bold text-gray-500 dark:text-gray-400 pt-5">:</span>
-                                <div className="flex-1"><label htmlFor="minutes" className="block text-sm font-medium text-gray-500 dark:text-gray-400">Minutes</label><input type="number" min="0" name="minutes" id="minutes" value={Math.floor((totalTimeInSeconds % 3600) / 60)} onChange={handleTimeInputChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
-                            </div>
-                        ) : (
-                             <div className="flex-1"><label htmlFor="endtime" className="block text-sm font-medium text-gray-500 dark:text-gray-400">End Time</label><input type="time" name="endtime" id="endtime" onChange={handleTimeInputChange} className="mt-1 w-full p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm" /></div>
-                        )}
-                        {settings.timeInputMode === 'duration' && (
-                            <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                Session will end at: <span className="font-semibold">{predictedEndTimeSetup}</span>
-                            </p>
-                        )}
-                    </div>
-                    <div className="mb-6"><StackedBar activities={setupActivities} setActivities={setSetupActivities} /></div>
-                    <div className="space-y-3">
-                        {setupActivities.map((activity, index) => (
-                            <div key={activity.id} className="flex items-center space-x-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg relative">
-                                <button onClick={() => setOpenColorPickerId(openColorPickerId === activity.id ? null : activity.id)} className="w-6 h-6 rounded-full flex-shrink-0 border-2 border-white/50" style={{backgroundColor: activity.color || defaultColors[index % defaultColors.length]}}></button>
-                                {openColorPickerId === activity.id && (
-                                    <ColorPicker favoriteColors={favoriteColors} setFavoriteColors={setFavoriteColors} onSelectColor={(color) => {handleUpdateActivity(activity.id, 'color', color); setOpenColorPickerId(null);}} onClose={() => setOpenColorPickerId(null)} />
-                                )}
-                                <input type="text" value={activity.name} onChange={(e) => handleUpdateActivity(activity.id, 'name', e.target.value)} className="flex-grow p-2 bg-transparent dark:text-white font-semibold outline-none" />
-                                <input type="number" value={Math.round(activity.percentage)} onChange={(e) => handleUpdatePercentage(activity.id, e.target.value)} className="w-20 p-2 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md" />
-                                <span className="font-semibold text-gray-500 dark:text-gray-400">%</span>
-                                <button onClick={() => handleRemoveActivity(activity.id)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full"><Icon path="M6 18L18 6M6 6l12 12" className="w-4 h-4"/></button>
-                            </div>
-                        ))}
-                    </div>
-                    <button onClick={handleAddActivity} className="mt-4 w-full text-sm font-semibold py-2 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">+ Add Activity</button>
-                    <div className="flex items-center justify-center mt-8">
-                        <button onClick={handleStartTimer} disabled={totalPercentage !== 100} className="px-10 py-4 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Start Session</button>
-                    </div>
-                     {totalPercentage !== 100 && (<p className="text-red-500 text-sm mt-2 font-medium text-center">Total must be 100%. It is currently {totalPercentage}%</p>)}
-                </div>
-            );
-
-            const renderTimerScreen = () => {
-                if (!sessionActivities.length) return null;
-                const currentActivity = sessionActivities[timerState.currentActivityIndex];
-                if (!currentActivity) return null;
-
-                const overallProgress = ((totalTimeInSeconds - timerState.totalTimeRemaining) / totalTimeInSeconds) * 100;
-
-                return (
-                    <div className="p-4 md:p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-auto my-8 text-center">
-                        {settings.showMainProgressBar && (
-                            <div className="mb-8">
-                                <div className="flex justify-between items-baseline text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                    {settings.showOverallTime && <span>{formatTime(timerState.totalTimeRemaining)}</span>}
-                                    {settings.showPredictedEndTime && <span>Ends at {predictedEndTimeSession}</span>}
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                                    <div className="bg-green-500 h-4 rounded-full" style={{ width: `${overallProgress}%` }}></div>
-                                </div>
-                            </div>
-                        )}
-                        <p className="text-indigo-500 dark:text-indigo-400 font-semibold">Current Activity</p>
-                        <h1 className="text-3xl md:text-5xl font-bold text-gray-800 dark:text-white my-2">{currentActivity.name}</h1>
-                        <p className="text-7xl md:text-8xl font-mono font-bold text-gray-900 dark:text-white my-6">{formatTime(currentActivity.remainingDuration)}</p>
-                        
-                        <div className="my-8 space-y-2">
-                             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">Switch Activity</h2>
-                             {sessionActivities.map((activity, index) => (
-                                 <button key={activity.id} onClick={() => handleSwitchActivity(index)} disabled={activity.remainingDuration <= 0}
-                                     className={`w-full p-3 rounded-lg text-left transition-colors flex justify-between items-center ${timerState.currentActivityIndex === index ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-500' : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                                     <span className={`font-semibold ${timerState.currentActivityIndex === index ? 'text-indigo-800 dark:text-indigo-200' : 'text-gray-800 dark:text-gray-200'}`}>{activity.name}</span>
-                                     <span className={`font-mono font-medium ${timerState.currentActivityIndex === index ? 'text-indigo-600 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>{formatTime(activity.remainingDuration)}</span>
-                                 </button>
-                             ))}
-                        </div>
-                        <div className="flex items-center justify-center space-x-4">
-                            <button onClick={handlePauseToggle} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-md">{timerState.isActive ? 'Pause' : 'Resume'}</button>
-                            <button onClick={handleReset} className="px-6 py-3 bg-red-600 text-white font-bold rounded-lg shadow-md">Reset Session</button>
-                        </div>
-                    </div>
-                );
-            };
-            
-             const renderCompletedScreen = () => (
-                <div className="p-8 md:p-12 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-auto my-8 text-center">
-                    <div className="text-6xl mb-4">🎉</div>
-                    <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-2">Session Complete!</h1>
-                    <button onClick={handleReset} className="w-full mt-8 px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg"> Start a New Session </button>
-                </div>
-            );
-            
-            const renderSettingsScreen = () => (
-                 <div className="fixed inset-0 bg-gray-900/80 p-4 flex justify-center items-center z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 space-y-6">
-                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Settings</h2>
-                         <div className="space-y-2">
-                            <label className="font-semibold text-gray-700 dark:text-gray-300">Time Input Mode</label>
-                            <div className="flex gap-2 p-1 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                                <button onClick={() => setSettings(s => ({...s, timeInputMode: 'duration'}))} className={`flex-1 p-2 rounded-md font-semibold transition-colors ${settings.timeInputMode === 'duration' ? 'bg-white dark:bg-gray-800 text-indigo-600' : 'text-gray-500'}`}>Duration</button>
-                                <button onClick={() => setSettings(s => ({...s, timeInputMode: 'endTime'}))} className={`flex-1 p-2 rounded-md font-semibold transition-colors ${settings.timeInputMode === 'endTime' ? 'bg-white dark:bg-gray-800 text-indigo-600' : 'text-gray-500'}`}>End Time</button>
-                            </div>
-                        </div>
-                        <label className="flex items-center justify-between">
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">Show Main Progress Bar</span>
-                            <div onClick={() => setSettings(s => ({...s, showMainProgressBar: !s.showMainProgressBar}))} className={`w-12 h-6 flex items-center bg-gray-300 dark:bg-gray-600 rounded-full p-1 cursor-pointer transition-colors ${settings.showMainProgressBar ? 'bg-indigo-600' : ''}`}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${settings.showMainProgressBar ? 'translate-x-6' : ''}`}></div>
-                            </div>
-                        </label>
-                         <label className="flex items-center justify-between">
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">Show Predicted End Time</span>
-                            <div onClick={() => setSettings(s => ({...s, showPredictedEndTime: !s.showPredictedEndTime}))} className={`w-12 h-6 flex items-center bg-gray-300 dark:bg-gray-600 rounded-full p-1 cursor-pointer transition-colors ${settings.showPredictedEndTime ? 'bg-indigo-600' : ''}`}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${settings.showPredictedEndTime ? 'translate-x-6' : ''}`}></div>
-                            </div>
-                        </label>
-                         <label className="flex items-center justify-between">
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">Show Overall Time Remaining</span>
-                            <div onClick={() => setSettings(s => ({...s, showOverallTime: !s.showOverallTime}))} className={`w-12 h-6 flex items-center bg-gray-300 dark:bg-gray-600 rounded-full p-1 cursor-pointer transition-colors ${settings.showOverallTime ? 'bg-indigo-600' : ''}`}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${settings.showOverallTime ? 'translate-x-6' : ''}`}></div>
-                            </div>
-                        </label>
-                        <button onClick={() => setScreen('setup')} className="w-full mt-4 bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700">Done</button>
-                    </div>
-                </div>
-            );
-
-            return (
-                <div className="min-h-screen p-4 flex items-center justify-center">
-                    <div className="w-full">
-                        {screen === 'setup' && renderSetupScreen()}
-                        {screen === 'timer' && renderTimerScreen()}
-                        {screen === 'completed' && renderCompletedScreen()}
-                        {screen === 'settings' && renderSettingsScreen()}
-                    </div>
-                </div>
-            );
+        if(newLeft < 0) {
+            newRight += newLeft;
+            newLeft = 0;
+        }
+        if(newRight < 0) {
+            newLeft += newRight;
+            newRight = 0;
         }
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-</body>
-</html>
+        newPercentages[segmentIndex] = newLeft;
+        newPercentages[segmentIndex + 1] = newRight;
+
+        setActivities(prev =>
+            prev.map((activity, index) => ({
+                ...activity,
+                percentage: newPercentages[index],
+            }))
+        );
+    };
+
+    const handleMouseUp = () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        const currentTotal = activities.reduce((sum, p) => sum + p.percentage, 0);
+        if (currentTotal > 0) {
+            const correctionFactor = 100 / currentTotal;
+            setActivities(prev => prev.map(a => ({...a, percentage: a.percentage * correctionFactor})))
+        }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+  
+  const getTotalRemainingTime = () => {
+    return activities.reduce((sum, activity) => sum + activity.timeRemaining, 0);
+  };
+
+  const getOverallProgress = () => {
+    const totalSessionSeconds = totalSessionMinutes * 60;
+    if (totalSessionSeconds === 0) return 0;
+    const remainingSeconds = getTotalRemainingTime();
+    return ((totalSessionSeconds - remainingSeconds) / totalSessionSeconds) * 100;
+  };
+  
+  const currentActivity = activities[currentActivityIndex];
+
+  if (isTimerActive) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 font-sans">
+        <div className="max-w-2xl mx-auto">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-2xl">TimeSlice Timer</CardTitle>
+                <div className="flex space-x-2">
+                  <Button variant="outline" size="sm" onClick={pauseResumeTimer} className="w-24">
+                    {isPaused ? <Icon name="play" className="h-4 w-4 mr-2" /> : <Icon name="pause" className="h-4 w-4 mr-2" />}
+                    {isPaused ? "Resume" : "Pause"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={resetSession} className="w-24">
+                    <Icon name="rotateCcw" className="h-4 w-4 mr-2" />
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {settings.showMainProgress && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Overall Progress</span>
+                    <span>{Math.round(getOverallProgress())}%</span>
+                  </div>
+                  <Progress value={getOverallProgress()} className="h-2" />
+                </div>
+              )}
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center space-x-3">
+                  <div className="w-6 h-6 rounded-full" style={{ backgroundColor: currentActivity?.color }} />
+                  <h2 className="text-3xl font-bold">{currentActivity?.name}</h2>
+                </div>
+                {settings.showActivityTimer && (
+                    <div className="text-6xl font-mono font-bold text-slate-800">{formatTime(currentActivity?.timeRemaining || 0)}</div>
+                )}
+                {isPaused && <Badge variant="secondary" className="text-lg px-4 py-2">PAUSED</Badge>}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+                {settings.showOverallTime && (
+                  <div className="space-y-1">
+                    <div className="text-sm text-gray-600">Total Remaining</div>
+                    <div className="text-xl font-semibold">{formatTime(getTotalRemainingTime())}</div>
+                  </div>
+                )}
+                {settings.showEndTime && (
+                  <div className="space-y-1">
+                    <div className="text-sm text-gray-600">Predicted End</div>
+                    <div className="text-xl font-semibold">{getPredictedEndTime()}</div>
+                  </div>
+                )}
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <h3 className="font-semibold">Activities</h3>
+                <div className="space-y-2">
+                  {activities.map((activity, index) => {
+                    const activityProgress = activity.duration > 0 ? ((activity.duration * 60 - activity.timeRemaining) / (activity.duration * 60)) * 100 : 0;
+                    const displayProgress = settings.activityProgressType === 'fill' ? activityProgress : 100 - activityProgress;
+                    
+                    return (
+                        <div
+                          key={activity.id}
+                          className={`relative overflow-hidden flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                            index === currentActivityIndex ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                          }`}
+                          onClick={() => switchToActivity(index)}
+                        >
+                          {settings.showActivityProgress && (
+                             <div className="absolute top-0 left-0 h-full opacity-20" style={{width: `${displayProgress}%`, backgroundColor: activity.color, transition: 'width 0.5s linear'}}></div>
+                          )}
+                          <div className="flex items-center space-x-3 z-10">
+                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: activity.color }} />
+                            <span className="font-medium">{activity.name}</span>
+                          </div>
+                          <div className="text-sm text-gray-600 z-10">{activity.duration} min</div>
+                        </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 font-sans">
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-3xl font-bold">TimeSlice</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(!showSettings)}>
+                <Icon name="settings" className="h-4 w-4 mr-2" />
+                Settings
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-8">
+            {showSettings && (
+              <Card className="bg-gray-50">
+                <CardHeader>
+                  <CardTitle className="text-lg">Timer Settings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-progress">Show main progress bar</Label>
+                    <Switch id="show-progress" checked={settings.showMainProgress} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, showMainProgress: checked }))} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-overall">Show overall remaining time</Label>
+                    <Switch id="show-overall" checked={settings.showOverallTime} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, showOverallTime: checked }))} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-end">Show predicted end time</Label>
+                    <Switch id="show-end" checked={settings.showEndTime} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, showEndTime: checked }))} />
+                  </div>
+                   <div className="flex items-center justify-between">
+                    <Label htmlFor="show-activity-timer">Show activity timer display</Label>
+                    <Switch id="show-activity-timer" checked={settings.showActivityTimer} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, showActivityTimer: checked }))} />
+                  </div>
+                   <div className="flex items-center justify-between">
+                    <Label htmlFor="show-activity-progress">Show individual activity progress</Label>
+                    <Switch id="show-activity-progress" checked={settings.showActivityProgress} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, showActivityProgress: checked }))} />
+                  </div>
+                  {settings.showActivityProgress && (
+                    <div className="flex items-center justify-between pl-4">
+                        <Label>Progress bar style</Label>
+                        <div className="flex items-center gap-4">
+                            <Button size="sm" variant={settings.activityProgressType === 'fill' ? 'default' : 'outline'} onClick={() => setSettings(prev => ({...prev, activityProgressType: 'fill'}))}>Fill Up</Button>
+                            <Button size="sm" variant={settings.activityProgressType === 'drain' ? 'default' : 'outline'} onClick={() => setSettings(prev => ({...prev, activityProgressType: 'drain'}))}>Drain Down</Button>
+                        </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Session Duration</h2>
+               <div className="flex items-center gap-4 mb-2">
+                    <Button size="sm" variant={durationType === 'duration' ? 'default' : 'outline'} onClick={() => setDurationType('duration')}>Set Duration</Button>
+                    <Button size="sm" variant={durationType === 'endTime' ? 'default' : 'outline'} onClick={() => setDurationType('endTime')}>Set End Time</Button>
+                </div>
+              {durationType === 'duration' ? (
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="hours">Hours:</Label>
+                      <Input id="hours" type="number" min="0" max="12" value={totalHours} onChange={(e) => setTotalHours(Number.parseInt(e.target.value) || 0)} className="w-20" />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="minutes">Minutes:</Label>
+                      <Input id="minutes" type="number" min="0" max="59" value={totalMinutes} onChange={(e) => setTotalMinutes(Number.parseInt(e.target.value) || 0)} className="w-20" />
+                    </div>
+                  </div>
+              ) : (
+                  <div className="flex flex-wrap items-center gap-4">
+                     <div className="flex items-center space-x-2">
+                        <Label htmlFor="end-time">End Time:</Label>
+                        <Input id="end-time" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-32" />
+                    </div>
+                  </div>
+              )}
+               <div className="text-sm text-gray-600">Total session will be {totalSessionMinutes} minutes.</div>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Time Allocation</h2>
+              <div className="relative h-12 bg-gray-200 rounded-lg overflow-hidden" onMouseDown={handleBarDrag}>
+                {activities.map((activity, index) => {
+                  const leftOffset = activities.slice(0, index).reduce((sum, a) => sum + a.percentage, 0);
+                  return (
+                    <div
+                      key={activity.id}
+                      className="absolute top-0 h-full flex items-center justify-center text-white font-medium text-sm transition-all duration-200"
+                      style={{ left: `${leftOffset}%`, width: `${activity.percentage}%`, backgroundColor: activity.color }}
+                    >
+                      {activity.percentage > 10 && `${Math.round(activity.percentage)}%`}
+                    </div>
+                  );
+                })}
+                {activities.slice(0, -1).map((_, index) => {
+                  const position = activities.slice(0, index + 1).reduce((sum, a) => sum + a.percentage, 0);
+                  return (
+                    <div key={index} className="absolute top-0 w-2 h-full bg-white/50 border-x border-gray-600/50 cursor-col-resize hover:bg-white transition-colors transform -translate-x-1/2" style={{ left: `${position}%` }} />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Activities</h2>
+                <Badge variant={Math.abs(totalPercentage - 100) < 0.1 ? 'default' : 'destructive'} className="text-sm">
+                  Total: {Math.round(totalPercentage * 10) / 10}%
+                </Badge>
+              </div>
+              <div className="space-y-3">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="flex flex-wrap items-center gap-4 p-4 border rounded-lg">
+                    <button className="w-8 h-8 rounded-full border-2 border-gray-300 hover:scale-110 transition-transform flex-shrink-0" style={{ backgroundColor: activity.color }} onClick={() => openColorPicker(activity.id, activity.color)} />
+                    <Input value={activity.name} onChange={(e) => updateActivityName(activity.id, e.target.value)} className="flex-grow min-w-[150px]" placeholder="Activity name" />
+                    <div className="flex items-center space-x-2">
+                      <Input type="number" min="0" max="100" step="0.1" value={Math.round(activity.percentage * 10) / 10} onChange={(e) => updateActivityPercentage(activity.id, Number.parseFloat(e.target.value) || 0)} className="w-24" />
+                      <span className="text-sm text-gray-600">%</span>
+                    </div>
+                    <div className="text-sm text-gray-600 w-20 text-right">{activity.duration} min</div>
+                    <Button variant="outline" size="sm" onClick={() => removeActivity(activity.id)} disabled={activities.length === 1}>
+                      <Icon name="trash2" className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" onClick={addActivity} className="w-full bg-transparent">
+                <Icon name="plus" className="h-4 w-4 mr-2" />
+                Add Activity
+              </Button>
+            </div>
+
+            <div className="flex justify-center pt-4">
+              <Button size="lg" onClick={startSession} disabled={Math.abs(totalPercentage - 100) > 0.1} className="px-8 py-3 text-lg">
+                <Icon name="play" className="h-5 w-5 mr-2" />
+                Start Session
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <ColorPicker isOpen={colorPickerState.isOpen} onClose={closeColorPicker} currentColor={colorPickerState.currentColor} onColorChange={handleColorChange} favorites={favoriteColors} onAddFavorite={addFavoriteColor} />
+    </div>
+  );
+}
