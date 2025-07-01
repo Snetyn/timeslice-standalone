@@ -103,6 +103,7 @@ interface Activity {
   color: string;
   duration: number; // in minutes
   timeRemaining: number; // in seconds
+  isCompleted: boolean;
 }
 
 interface TimerSettings {
@@ -123,7 +124,7 @@ interface ColorPickerProps {
   onAddFavorite: (color: string) => void;
 }
 
-// --- Color Picker Component ---
+// --- Modals ---
 const ColorPicker = ({ isOpen, onClose, currentColor, onColorChange, favorites, onAddFavorite }: ColorPickerProps) => {
   const [hue, setHue] = useState(0);
   const [saturation, setSaturation] = useState(100);
@@ -270,11 +271,60 @@ const ColorPicker = ({ isOpen, onClose, currentColor, onColorChange, favorites, 
   );
 };
 
+const DistributeTimeModal = ({ isOpen, onClose, bankedTime, onDistribute }) => {
+    const [newActivityName, setNewActivityName] = useState("Banked Time Activity");
+
+    if (!isOpen) return null;
+
+    const formatTime = (seconds: number) => {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+        if (minutes > 0) return `${minutes}m ${secs}s`;
+        return `${secs}s`;
+    };
+
+    const handleDistribute = () => {
+        if (newActivityName.trim()) {
+            onDistribute(newActivityName.trim());
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-md">
+                <CardHeader>
+                    <CardTitle className="text-lg">Distribute Banked Time</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <p>You have <span className="font-bold text-green-600">{formatTime(bankedTime)}</span> of banked time.</p>
+                    <p>Create a new activity with this time.</p>
+                    <div className="space-y-2">
+                        <Label htmlFor="new-activity-name">New Activity Name</Label>
+                        <Input
+                            id="new-activity-name"
+                            value={newActivityName}
+                            onChange={(e) => setNewActivityName(e.target.value)}
+                            placeholder="e.g., Review, Extra Break"
+                        />
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <Button variant="outline" onClick={onClose}>Cancel</Button>
+                        <Button onClick={handleDistribute}>Create Activity</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
+
+
 // --- Main Application Component ---
 export default function App() {
   const [activities, setActivities] = useState<Activity[]>([
-    { id: "1", name: "Focus Work", percentage: 60, color: "hsl(220, 70%, 50%)", duration: 0, timeRemaining: 0 },
-    { id: "2", name: "Break", percentage: 40, color: "hsl(120, 60%, 50%)", duration: 0, timeRemaining: 0 },
+    { id: "1", name: "Focus Work", percentage: 60, color: "hsl(220, 70%, 50%)", duration: 0, timeRemaining: 0, isCompleted: false },
+    { id: "2", name: "Break", percentage: 40, color: "hsl(120, 60%, 50%)", duration: 0, timeRemaining: 0, isCompleted: false },
   ]);
 
   const [totalHours, setTotalHours] = useState(2);
@@ -282,7 +332,6 @@ export default function App() {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
-  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [colorPickerState, setColorPickerState] = useState({ isOpen: false, activityId: "", currentColor: "" });
   const [favoriteColors, setFavoriteColors] = useState<string[]>([
@@ -298,6 +347,9 @@ export default function App() {
   });
   const [durationType, setDurationType] = useState<'duration' | 'endTime'>('duration');
   const [endTime, setEndTime] = useState('23:30');
+  const [bankedTime, setBankedTime] = useState(0);
+  const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
+  const prevIsTimerActive = useRef(false);
 
   const calculateTotalSessionMinutes = () => {
     if (durationType === 'endTime') {
@@ -306,7 +358,7 @@ export default function App() {
         const endDate = new Date();
         endDate.setHours(endHour, endMinute, 0, 0);
         if (endDate < now) {
-            endDate.setDate(endDate.getDate() + 1); // If end time is in the past, assume it's for the next day
+            endDate.setDate(endDate.getDate() + 1);
         }
         return Math.round((endDate.getTime() - now.getTime()) / 60000);
     }
@@ -319,11 +371,13 @@ export default function App() {
   useEffect(() => {
     setActivities((prev) =>
       prev.map((activity) => {
+        if (activity.percentage === 0) return activity; // Don't reset banked activities
         const newDuration = Math.round((activity.percentage / 100) * totalSessionMinutes);
         return {
           ...activity,
           duration: newDuration,
           timeRemaining: newDuration * 60,
+          isCompleted: false,
         };
       }),
     );
@@ -335,26 +389,37 @@ export default function App() {
     if (isTimerActive && !isPaused) {
       interval = window.setInterval(() => {
         setActivities(prevActivities => {
-          const newActivities = [...prevActivities];
-          const currentActivity = newActivities[currentActivityIndex];
+            const newActivities = prevActivities.map(a => ({...a}));
+            const currentActivity = newActivities[currentActivityIndex];
 
-          if (currentActivity.timeRemaining > 0) {
-            currentActivity.timeRemaining -= 1;
-          } else {
-            const nextIndex = currentActivityIndex + 1;
-            if (nextIndex < newActivities.length) {
-              setCurrentActivityIndex(nextIndex);
+            if (currentActivity && !currentActivity.isCompleted && currentActivity.timeRemaining > 0) {
+                currentActivity.timeRemaining -= 1;
+                return newActivities;
             } else {
-              setIsTimerActive(false); // End of session
+                const nextIndex = newActivities.findIndex((act, index) => index > currentActivityIndex && !act.isCompleted);
+                if (nextIndex !== -1) {
+                    setCurrentActivityIndex(nextIndex);
+                } else {
+                    const allDone = newActivities.every(a => a.isCompleted || a.timeRemaining === 0);
+                    if (allDone) {
+                        setIsTimerActive(false);
+                    }
+                }
+                return prevActivities;
             }
-          }
-          return newActivities;
         });
       }, 1000);
     }
 
     return () => clearInterval(interval);
   }, [isTimerActive, isPaused, currentActivityIndex]);
+  
+  useEffect(() => {
+    if (prevIsTimerActive.current && !isTimerActive && bankedTime > 0) {
+        setIsDistributeModalOpen(true);
+    }
+    prevIsTimerActive.current = isTimerActive;
+  }, [isTimerActive, bankedTime]);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -368,7 +433,7 @@ export default function App() {
 
   const getPredictedEndTime = () => {
     if (!isTimerActive) return "";
-    const totalRemainingSeconds = activities.reduce((sum, act) => sum + act.timeRemaining, 0);
+    const totalRemainingSeconds = getTotalRemainingTime();
     const endTime = new Date(Date.now() + totalRemainingSeconds * 1000);
     return endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
@@ -381,6 +446,7 @@ export default function App() {
       color: `hsl(${Math.floor(Math.random() * 360)}, 60%, 50%)`,
       duration: 0,
       timeRemaining: 0,
+      isCompleted: false,
     };
     setActivities([...activities, newActivity]);
   };
@@ -433,7 +499,6 @@ export default function App() {
       setIsTimerActive(true);
       setIsPaused(false);
       setCurrentActivityIndex(0);
-      setSessionStartTime(new Date());
     }
   };
 
@@ -445,17 +510,69 @@ export default function App() {
     setIsTimerActive(false);
     setIsPaused(false);
     setCurrentActivityIndex(0);
-    setSessionStartTime(null);
+    setBankedTime(0);
      setActivities((prev) =>
       prev.map((activity) => ({
         ...activity,
         timeRemaining: activity.duration * 60,
+        isCompleted: false,
       })),
     );
   };
 
   const switchToActivity = (index: number) => {
-    setCurrentActivityIndex(index);
+    if (!activities[index].isCompleted) {
+        setCurrentActivityIndex(index);
+    }
+  };
+
+  const handleCompleteActivity = (activityId: string) => {
+    let timeToBank = 0;
+    const updatedActivities = activities.map(act => {
+        if (act.id === activityId && !act.isCompleted) {
+            timeToBank = act.timeRemaining;
+            return { ...act, timeRemaining: 0, isCompleted: true };
+        }
+        return act;
+    });
+
+    if (timeToBank > 0) {
+        setBankedTime(prev => prev + timeToBank);
+    }
+    
+    setActivities(updatedActivities);
+
+    const allCompleted = updatedActivities.every(a => a.isCompleted);
+    if (allCompleted) {
+        setIsTimerActive(false);
+        return;
+    }
+
+    const currentActivityIsCompleted = updatedActivities[currentActivityIndex].isCompleted;
+    if (currentActivityIsCompleted) {
+        const nextIndex = updatedActivities.findIndex((act) => !act.isCompleted);
+        if (nextIndex !== -1) {
+            setCurrentActivityIndex(nextIndex);
+        } else {
+            setIsTimerActive(false);
+        }
+    }
+  };
+
+  const handleDistributeTime = (newActivityName: string) => {
+    const newActivity: Activity = {
+        id: Date.now().toString(),
+        name: newActivityName,
+        percentage: 0,
+        color: `hsl(${Math.floor(Math.random() * 360)}, 60%, 50%)`,
+        duration: Math.round(bankedTime / 60),
+        timeRemaining: 0, // It's not part of a new session yet
+        isCompleted: true, // Mark as completed conceptually
+    };
+    setActivities(prev => [...prev.map(a => ({...a, isCompleted: false, timeRemaining: a.duration * 60})), newActivity]);
+    setBankedTime(0);
+    setIsDistributeModalOpen(false);
+    resetSession();
   };
 
   const openColorPicker = (activityId: string, currentColor: string) => {
@@ -489,7 +606,7 @@ export default function App() {
     for (let i = 0; i < activities.length - 1; i++) {
         cumulativePercentage += startPercentages[i];
         const segmentPosition = (cumulativePercentage / 100) * rect.width;
-        if (Math.abs(startX - rect.left - segmentPosition) < 10) { // 10px tolerance
+        if (Math.abs(startX - rect.left - segmentPosition) < 10) {
             segmentIndex = i;
             break;
         }
@@ -544,14 +661,15 @@ export default function App() {
   };
   
   const getTotalRemainingTime = () => {
-    return activities.reduce((sum, activity) => sum + activity.timeRemaining, 0);
+    return activities.reduce((sum, activity) => sum + activity.timeRemaining, 0) + bankedTime;
   };
 
   const getOverallProgress = () => {
-    const totalSessionSeconds = totalSessionMinutes * 60;
-    if (totalSessionSeconds === 0) return 0;
-    const remainingSeconds = getTotalRemainingTime();
-    return ((totalSessionSeconds - remainingSeconds) / totalSessionSeconds) * 100;
+    const initialTotalSeconds = totalSessionMinutes * 60;
+    if (initialTotalSeconds === 0) return 0;
+    const currentRemainingSeconds = activities.reduce((sum, activity) => sum + activity.timeRemaining, 0);
+    const elapsedSeconds = initialTotalSeconds - currentRemainingSeconds;
+    return (elapsedSeconds / initialTotalSeconds) * 100;
   };
   
   const currentActivity = activities[currentActivityIndex];
@@ -592,7 +710,7 @@ export default function App() {
                   <h2 className="text-3xl font-bold">{currentActivity?.name}</h2>
                 </div>
                 {settings.showActivityTimer && (
-                    <div className="text-6xl font-mono font-bold text-slate-800">{formatTime(currentActivity?.timeRemaining || 0)}</div>
+                    <div className="text-6xl font-mono font-bold text-slate-800">{currentActivity?.isCompleted ? "COMPLETED" : formatTime(currentActivity?.timeRemaining || 0)}</div>
                 )}
                 {isPaused && <Badge variant="secondary" className="text-lg px-4 py-2">PAUSED</Badge>}
               </div>
@@ -600,7 +718,10 @@ export default function App() {
                 {settings.showOverallTime && (
                   <div className="space-y-1">
                     <div className="text-sm text-gray-600">Total Remaining</div>
-                    <div className="text-xl font-semibold">{formatTime(getTotalRemainingTime())}</div>
+                    <div className="text-xl font-semibold">
+                        {formatTime(getTotalRemainingTime())}
+                        {bankedTime > 0 && <span className="text-sm text-green-600 ml-2">(+{formatTime(bankedTime)} banked)</span>}
+                    </div>
                   </div>
                 )}
                 {settings.showEndTime && (
@@ -621,17 +742,18 @@ export default function App() {
                     return (
                         <div
                           key={activity.id}
-                          className={`relative overflow-hidden flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                            index === currentActivityIndex ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
-                          }`}
+                          className={`relative overflow-hidden flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                            index === currentActivityIndex && !activity.isCompleted ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                          } ${activity.isCompleted ? 'bg-green-50' : ''}`}
                           onClick={() => switchToActivity(index)}
                         >
                           {settings.showActivityProgress && (
-                             <div className="absolute top-0 left-0 h-full opacity-20" style={{width: `${displayProgress}%`, backgroundColor: activity.color, transition: 'width 0.5s linear'}}></div>
+                             <div className="absolute top-0 left-0 h-full opacity-20" style={{width: `${activity.isCompleted ? 100 : displayProgress}%`, backgroundColor: activity.color, transition: 'width 0.5s linear'}}></div>
                           )}
-                          <div className="flex items-center space-x-3 z-10">
+                          <div className="flex items-center space-x-4 z-10">
+                            <input type="checkbox" className="h-5 w-5 rounded text-slate-600 focus:ring-slate-500" checked={activity.isCompleted} disabled={activity.isCompleted} onChange={() => handleCompleteActivity(activity.id)} />
                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: activity.color }} />
-                            <span className="font-medium">{activity.name}</span>
+                            <span className={`font-medium ${activity.isCompleted ? 'line-through text-gray-500' : ''}`}>{activity.name}</span>
                           </div>
                           <div className="text-sm text-gray-600 z-10">{activity.duration} min</div>
                         </div>
@@ -790,6 +912,7 @@ export default function App() {
         </Card>
       </div>
       <ColorPicker isOpen={colorPickerState.isOpen} onClose={closeColorPicker} currentColor={colorPickerState.currentColor} onColorChange={handleColorChange} favorites={favoriteColors} onAddFavorite={addFavoriteColor} />
+      <DistributeTimeModal isOpen={isDistributeModalOpen} onClose={() => setIsDistributeModalOpen(false)} bankedTime={bankedTime} onDistribute={handleDistributeTime} />
     </div>
   );
 }
